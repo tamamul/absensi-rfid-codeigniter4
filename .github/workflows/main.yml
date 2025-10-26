@@ -1,0 +1,70 @@
+name: PHPUnit + Build ZIP
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  main:
+    name: Build, Test & Package
+    strategy:
+      matrix:
+        php-versions: ['7.2', '7.3', '7.4']
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+          tools: composer, phpunit
+          extensions: intl, json, mbstring, mysqlnd, xdebug, xml, sqlite3
+          coverage: xdebug
+
+      - name: Install zip (for packaging)
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+
+      - name: Cache composer dependencies
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install Composer dependencies
+        run: composer install --no-progress --no-suggest --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Run PHPUnit tests
+        run: vendor/bin/phpunit --coverage-text
+
+      - name: Prepare deploy folder
+        run: |
+          rm -rf deploy
+          mkdir deploy
+          cp -r app bootstrap config database public resources routes vendor artisan deploy/
+          if [ -f database/dummy.sql ]; then cp database/dummy.sql deploy/database.sql; fi
+          if [ -f .env.example ]; then cp .env.example deploy/.env; fi
+          ls -R deploy
+
+      - name: Create ZIP package
+        run: |
+          cd deploy
+          zip -r ../project-deploy.zip ./*
+          cd ..
+          ls -l project-deploy.zip
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: project-deploy
+          path: project-deploy.zip
