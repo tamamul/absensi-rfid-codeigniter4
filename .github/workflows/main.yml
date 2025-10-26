@@ -1,4 +1,4 @@
-name: PHPUnit + Build CI4 ZIP
+name: CI4 PHPUnit + Deploy ZIP
 
 on:
   push:
@@ -7,14 +7,20 @@ on:
     branches: [ master ]
 
 jobs:
-  main:
-    name: Build, Test & Package CI4
+  build-deploy:
+    name: Build, Test & Create ZIP
     runs-on: ubuntu-latest
 
     steps:
+      # ---------------------------
+      # 1️⃣ Checkout repo
+      # ---------------------------
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # ---------------------------
+      # 2️⃣ Setup PHP 8 + tools
+      # ---------------------------
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -23,40 +29,61 @@ jobs:
           extensions: intl, json, mbstring, mysqlnd, xdebug, xml, sqlite3
           coverage: xdebug
 
-      - name: Install zip (for packaging)
+      # ---------------------------
+      # 3️⃣ Install zip utility
+      # ---------------------------
+      - name: Install zip
         run: sudo apt-get update && sudo apt-get install -y zip
 
+      # ---------------------------
+      # 4️⃣ Install composer dependencies
+      # ---------------------------
       - name: Install Composer dependencies
         run: composer install --no-progress --no-suggest --no-interaction --prefer-dist --optimize-autoloader
 
+      # ---------------------------
+      # 5️⃣ Run PHPUnit (lalu lanjut walau gagal)
+      # ---------------------------
       - name: Run PHPUnit tests
         run: vendor/bin/phpunit --coverage-text || true
-        # `|| true` supaya workflow tetap lanjut walau ada 1 test gagal
 
+      # ---------------------------
+      # 6️⃣ Prepare deploy folder (shared hosting ready)
+      # ---------------------------
       - name: Prepare deploy folder
         run: |
           rm -rf deploy
           mkdir deploy
-          # Copy CI4 folders
-          for f in app public system writable tests; do
+          echo "Copy core CI4 folders..."
+          for f in app system writable; do
             if [ -d "$f" ]; then cp -r "$f" deploy/; fi
           done
-          # Copy .env if exists
+          echo "Copy .env if exists..."
           if [ -f .env ]; then cp .env deploy/.env; fi
-          # Copy dummy DB if exists
+          echo "Copy database dummy if exists..."
           if [ -f database/dummy.sql ]; then cp database/dummy.sql deploy/database.sql; fi
-          echo "Deploy folder contents:"
+          echo "Move public files to root of deploy folder..."
+          for f in public/*; do
+            cp -r "$f" deploy/
+          done
+          echo "Deploy folder prepared:"
           ls -R deploy
 
+      # ---------------------------
+      # 7️⃣ Create ZIP package
+      # ---------------------------
       - name: Create ZIP package
         run: |
           cd deploy
-          zip -r ../project-deploy.zip ./*
+          zip -r ../rfidc4-deploy.zip ./*
           cd ..
-          ls -l project-deploy.zip
+          ls -l rfidc4-deploy.zip
 
+      # ---------------------------
+      # 8️⃣ Upload ZIP artifact to GitHub
+      # ---------------------------
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ci4-project-deploy
-          path: project-deploy.zip
+          name: ci4-shared-hosting-deploy
+          path: rfidc4-deploy.zip
