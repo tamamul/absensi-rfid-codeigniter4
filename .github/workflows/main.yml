@@ -3,8 +3,7 @@ name: CI4 PHPUnit + Full Deploy ZIP
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  workflow_dispatch: # Bisa trigger manual
 
 jobs:
   build-deploy:
@@ -12,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout
+      # 1️⃣ Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -24,11 +23,11 @@ jobs:
           tools: composer, phpunit
           extensions: intl, json, mbstring, mysqlnd, xml, xdebug
 
-      # 3️⃣ Install zip
+      # 3️⃣ Install zip utility
       - name: Install zip
         run: sudo apt-get update && sudo apt-get install -y zip
 
-      # 4️⃣ Install composer dependencies
+      # 4️⃣ Install Composer dependencies (vendor)
       - name: Install Composer dependencies
         run: composer install --no-progress --no-suggest --no-interaction --prefer-dist --optimize-autoloader
 
@@ -36,12 +35,12 @@ jobs:
       - name: Run PHPUnit
         run: vendor/bin/phpunit --coverage-text || true
 
-      # 6️⃣ Prepare deploy folder (full)
+      # 6️⃣ Prepare deploy folder (include vendor)
       - name: Prepare deploy folder
         run: |
           rm -rf deploy
           mkdir deploy
-          # Copy core CI4 folders
+          # Copy core folders + vendor
           for f in app system writable vendor; do
             if [ -d "$f" ]; then cp -r "$f" deploy/; fi
           done
@@ -49,22 +48,22 @@ jobs:
           if [ -f .env ]; then cp .env deploy/.env; fi
           # Copy database dummy
           if [ -f database/dummy.sql ]; then cp database/dummy.sql deploy/database.sql; fi
-          # Move public files to root of deploy folder
+          # Move public files to root of deploy
           for f in public/*; do
             cp -r "$f" deploy/
           done
           echo "Deploy folder prepared:"
           ls -R deploy
 
-      # 7️⃣ Create ZIP
+      # 7️⃣ Create full ZIP package
       - name: Create ZIP package
         run: |
           cd deploy
-          zip -r ../rfidc4-full-deploy.zip ./*
+          zip -r ../rfidc4-full-deploy.zip ./* > /dev/null
           cd ..
-          ls -l rfidc4-full-deploy.zip
+          ls -lh rfidc4-full-deploy.zip
 
-      # 8️⃣ Upload ZIP artifact
+      # 8️⃣ Upload artifact (v4)
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
