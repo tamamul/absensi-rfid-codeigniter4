@@ -1,4 +1,4 @@
-name: PHPUnit
+name: PHPUnit + Build ZIP
 
 on:
   pull_request:
@@ -7,8 +7,7 @@ on:
 
 jobs:
   main:
-    name: Build and test
-
+    name: Build, Test & Package
     strategy:
       matrix:
         php-versions: ['7.2', '7.3', '7.4']
@@ -31,21 +30,39 @@ jobs:
 
       - name: Get composer cache directory
         id: composer-cache
-        run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_ENV
 
       - name: Cache composer dependencies
         uses: actions/cache@v1
         with:
-          path: ${{ steps.composer-cache.outputs.dir }}
+          path: ${{ env.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: Install dependencies
         run: composer install --no-progress --no-suggest --no-interaction --prefer-dist --optimize-autoloader
-        # To prevent rate limiting you may need to supply an OAuth token in Settings > Secrets
-        # env:
-          # https://getcomposer.org/doc/articles/troubleshooting.md#api-rate-limit-and-oauth-tokens
-          # COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
 
-      - name: Test with phpunit
+      - name: Run PHPUnit tests
         run: vendor/bin/phpunit --coverage-text
+
+      # --- Package for deployment ---
+      - name: Prepare deploy folder
+        run: |
+          mkdir deploy
+          cp -r app bootstrap config database public resources routes vendor artisan deploy/
+          # copy DB dummy (misal database/dummy.sql)
+          cp database/dummy.sql deploy/database.sql
+          # optional: copy .env.example -> .env
+          cp .env.example deploy/.env
+
+      - name: Create ZIP
+        run: |
+          cd deploy
+          zip -r ../project-deploy.zip ./*
+          cd ..
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: project-deploy
+          path: project-deploy.zip
