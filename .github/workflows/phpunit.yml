@@ -2,11 +2,9 @@ name: PHPUnit + Build ZIP
 
 on:
   push:
-    branches:
-      - develop
+    branches: [ develop ]
   pull_request:
-    branches:
-      - develop
+    branches: [ develop ]
 
 jobs:
   main:
@@ -25,17 +23,21 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-versions }}
-          tools: composer, pecl, phpunit
+          tools: composer, phpunit
           extensions: intl, json, mbstring, mysqlnd, xdebug, xml, sqlite3
+          coverage: xdebug
+
+      - name: Install zip (for packaging)
+        run: sudo apt-get update && sudo apt-get install -y zip
 
       - name: Get composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_ENV
+        run: echo "::set-output name=dir::$(composer config cache-files-dir)"
 
       - name: Cache composer dependencies
         uses: actions/cache@v3
         with:
-          path: ${{ env.dir }}
+          path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
 
@@ -49,13 +51,9 @@ jobs:
         run: |
           rm -rf deploy
           mkdir deploy
-          # copy project files
           cp -r app bootstrap config database public resources routes vendor artisan deploy/
-          # copy DB dummy
           if [ -f database/dummy.sql ]; then cp database/dummy.sql deploy/database.sql; fi
-          # copy env example
           if [ -f .env.example ]; then cp .env.example deploy/.env; fi
-          echo "Deploy folder contents:"
           ls -R deploy
 
       - name: Create ZIP package
@@ -63,10 +61,10 @@ jobs:
           cd deploy
           zip -r ../project-deploy.zip ./*
           cd ..
-          echo "ZIP created at project-deploy.zip"
+          ls -l project-deploy.zip
 
       - name: Upload ZIP artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: project-deploy
           path: project-deploy.zip
